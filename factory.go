@@ -4,14 +4,14 @@ import "github.com/pp-group/file_helper/storage"
 
 type StorageFactory func() storage.IStorage
 
-func OssStorageFactory(endpoint, ak, sk string) func() (storage.IStorage, error) {
+func OssStorageFactory(endpoint, ak, sk, folder string) func() (storage.IStorage, error) {
 	return func() (storage.IStorage, error) {
-		return storage.NewOssStorage(endpoint, ak, sk)
+		return storage.NewOssStorage(endpoint, ak, sk, folder)
 	}
 }
 
-func FileStorageFactory() func() (storage.IStorage, error) {
+func FileStorageFactory(folder string) func() (storage.IStorage, error) {
 	return func() (storage.IStorage, error) {
-		return storage.NewFileStorage()
+		return storage.NewFileStorage(folder)
 	}
 }

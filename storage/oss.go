@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
@@ -13,50 +14,64 @@ var _ IStorage = new(OssStorage)
 
 type OssStorage struct {
 	*oss.Client
+	folder string
 }
 
-func NewOssStorage(endpoint, ak, sk string) (*OssStorage, error) {
+func NewOssStorage(endpoint, ak, sk, folder string) (*OssStorage, error) {
 	client, err := oss.New(endpoint, ak, sk)
 	if err != nil {
 		return nil, err
 	}
 	return &OssStorage{
 		Client: client,
+		folder: folder,
 	}, nil
 }
 
 func (storage *OssStorage) Writer(objFullPath string, helper ParamsHelper) (IWriteBroker, error) {
-	if helper == nil {
-		return nil, errors.New("oss storage must need a paramsHelper to specify buckert name")
-	}
-	osb, err := NewOssStorageBroker(storage.Client, helper().(string), objFullPath)
+	broker, err := newOssStorageBroker(storage.Client, objFullPath, helper, storage.folder)
+
 	if err != nil {
-		return nil, fmt.Errorf("initialize the broker err. %s", err.Error())
+		return nil, err
 	}
-	return osb, nil
+
+	return broker, nil
 }
 
 func (storage *OssStorage) Reader(objFullPath string, helper ParamsHelper) (IReadBroker, error) {
 
+	broker, err := newOssStorageBroker(storage.Client, objFullPath, helper, storage.folder)
+
+	if err != nil {
+		return nil, err
+	}
+	return broker, nil
+}
+
+func (storage *OssStorage) Manager(objFullPath string, helper ParamsHelper) (IManageBroker, error) {
+	broker, err := newOssStorageBroker(storage.Client, objFullPath, helper, storage.folder)
+
+	if err != nil {
+		return nil, err
+	}
+	return broker, nil
+}
+
+func newOssStorageBroker(client *oss.Client, objFullPath string, helper ParamsHelper, folder string) (*OssStorageBroker, error) {
+
 	if helper == nil {
 		return nil, errors.New("oss storage must need a paramsHelper to specify buckert name")
 	}
 
-	osb, err := NewOssStorageBroker(storage.Client, helper().(string), objFullPath)
+	broker, err := NewOssStorageBroker(client, helper().(string), filepath.Join(folder, objFullPath))
 	if err != nil {
 		return nil, fmt.Errorf("initialize the broker err. %s", err.Error())
 	}
-	return osb, nil
+
+	return broker, nil
 }
 
 var _ IBroker = new(OssStorageBroker)
-
-type BrokerActionStatus int
-
-const (
-	WriteStatus BrokerActionStatus = 0
-	ReadStatus  BrokerActionStatus = 1
-)
 
 type OssStorageBroker struct {
 	IStorage
@@ -64,7 +79,6 @@ type OssStorageBroker struct {
 	nextPos int64
 	objName string
 	stream  io.ReadCloser
-	status  BrokerActionStatus
 }
 
 func NewOssStorageBroker(client *oss.Client, bucketName, objName string) (*OssStorageBroker, error) {
@@ -78,7 +92,7 @@ func NewOssStorageBroker(client *oss.Client, bucketName, objName string) (*OssSt
 		objName: objName,
 	}, nil
 }
-func (broker *OssStorageBroker) download(objName string) (io.Reader, error) {
+func (broker *OssStorageBroker) download(objName string) (io.ReadCloser, error) {
 
 	uploadStatus, err := broker.getObjMeta(broker.objName, "File-Upload-Status")
 
@@ -155,26 +169,37 @@ func (broker *OssStorageBroker) getObjMeta(objName string, key string) (string, 
 
 }
 
-func (broker *OssStorageBroker) Read(p []byte) (n int, err error) {
+func (broker *OssStorageBroker) Read(p []byte) (int, error) {
 
-	return 0, nil
+	var err error
+
+	if broker.stream != nil {
+		broker.stream, err = broker.download(broker.objName)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return broker.stream.Read(p)
+
 }
 
 func (broker *OssStorageBroker) Write(p []byte) (n int, err error) {
-	broker.status = WriteStatus
 	if err = broker.upload(broker.objName, bytes.NewReader(p)); err != nil {
 		return 0, err
 	}
 	return len(p), nil
 }
 
+func (broker *OssStorageBroker) Delete(objKey string) error {
+	return broker.bucket.DeleteObject(objKey)
+}
+
 func (broker *OssStorageBroker) Close() error {
-	if broker.status == WriteStatus {
-		return broker.setObjMeta(broker.objName, "File-Upload-Status", "Finished")
-	} else if broker.status == ReadStatus {
+	if broker.stream != nil {
 		return broker.stream.Close()
+	} else {
+		return broker.setObjMeta(broker.objName, "File-Upload-Status", "Finished")
 	}
-	return nil
 }
 
 func (broker *OssStorageBroker) Exist(objNmae string) (bool, error) {

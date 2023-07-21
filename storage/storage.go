@@ -7,6 +7,7 @@ import (
 type IStorage interface {
 	Writer(string, ParamsHelper) (IWriteBroker, error)
 	Reader(string, ParamsHelper) (IReadBroker, error)
+	Manager(string, ParamsHelper) (IManageBroker, error)
 }
 
 type IReadBroker interface {
@@ -22,12 +23,17 @@ type IWriteBroker interface {
 type IBroker interface {
 	IReadBroker
 	IWriteBroker
+	IManageBroker
 }
 
 type BrokerBundle interface {
 	Close() error
 	Exist(string) (bool, error)
 	URL(string) (string, error)
+}
+
+type IManageBroker interface {
+	Delete(string) error
 }
 
 type ParamsHelper func() interface{}

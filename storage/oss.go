@@ -28,8 +28,8 @@ func NewOssStorage(endpoint, ak, sk, folder string) (*OssStorage, error) {
 	}, nil
 }
 
-func (storage *OssStorage) Writer(objFullPath string, helper ParamsHelper) (IWriteBroker, error) {
-	broker, err := newOssStorageBroker(storage.Client, objFullPath, helper, storage.folder)
+func (storage *OssStorage) Writer(objName string, helper ParamsHelper) (IWriteBroker, error) {
+	broker, err := newOssStorageBroker(storage.Client, objName, helper, storage.folder)
 
 	if err != nil {
 		return nil, err
@@ -38,18 +38,9 @@ func (storage *OssStorage) Writer(objFullPath string, helper ParamsHelper) (IWri
 	return broker, nil
 }
 
-func (storage *OssStorage) Reader(objFullPath string, helper ParamsHelper) (IReadBroker, error) {
+func (storage *OssStorage) Reader(objName string, helper ParamsHelper) (IReadBroker, error) {
 
-	broker, err := newOssStorageBroker(storage.Client, objFullPath, helper, storage.folder)
-
-	if err != nil {
-		return nil, err
-	}
-	return broker, nil
-}
-
-func (storage *OssStorage) Manager(objFullPath string, helper ParamsHelper) (IManageBroker, error) {
-	broker, err := newOssStorageBroker(storage.Client, objFullPath, helper, storage.folder)
+	broker, err := newOssStorageBroker(storage.Client, objName, helper, storage.folder)
 
 	if err != nil {
 		return nil, err
@@ -57,13 +48,22 @@ func (storage *OssStorage) Manager(objFullPath string, helper ParamsHelper) (IMa
 	return broker, nil
 }
 
-func newOssStorageBroker(client *oss.Client, objFullPath string, helper ParamsHelper, folder string) (*OssStorageBroker, error) {
+func (storage *OssStorage) Manager(objName string, helper ParamsHelper) (IManageBroker, error) {
+	broker, err := newOssStorageBroker(storage.Client, objName, helper, storage.folder)
+
+	if err != nil {
+		return nil, err
+	}
+	return broker, nil
+}
+
+func newOssStorageBroker(client *oss.Client, objName string, helper ParamsHelper, folder string) (*OssStorageBroker, error) {
 
 	if helper == nil {
 		return nil, errors.New("oss storage must need a paramsHelper to specify buckert name")
 	}
 
-	broker, err := NewOssStorageBroker(client, helper().(string), filepath.Join(folder, objFullPath))
+	broker, err := NewOssStorageBroker(client, helper().(string), filepath.Join(folder, objName))
 	if err != nil {
 		return nil, fmt.Errorf("initialize the broker err. %s", err.Error())
 	}
@@ -116,7 +116,7 @@ func (broker *OssStorageBroker) download(objName string) (io.ReadCloser, error) 
 
 }
 
-func (broker *OssStorageBroker) URL(objName string) (string, error) {
+func (broker *OssStorageBroker) URL() (string, error) {
 
 	uploadStatus, err := broker.getObjMeta(broker.objName, "File-Upload-Status")
 
@@ -128,7 +128,7 @@ func (broker *OssStorageBroker) URL(objName string) (string, error) {
 		return "", errors.New("target file upload pending")
 	}
 
-	signURL, err := broker.bucket.SignURL(objName, oss.HTTPGet, 60)
+	signURL, err := broker.bucket.SignURL(broker.objName, oss.HTTPGet, 300)
 
 	if err != nil {
 		return "", err
@@ -140,33 +140,29 @@ func (broker *OssStorageBroker) URL(objName string) (string, error) {
 
 func (storage *OssStorageBroker) upload(objName string, objValue io.Reader) error {
 	bucket := storage.bucket
-	{
-		var err error
-		if storage.nextPos == 0 {
-			storage.nextPos, err = bucket.AppendObject(objName, objValue, storage.nextPos, oss.Meta("File-Upload-Status", "Pending"))
-		} else {
-			storage.nextPos, err = bucket.AppendObject(objName, objValue, storage.nextPos)
-		}
-		if err != nil {
-			return err
-		}
-	}
 	storageType := oss.ObjectStorageClass(oss.StorageStandard)
 	objectAcl := oss.ObjectACL(oss.ACLDefault)
-	return bucket.PutObject(objName, objValue, storageType, objectAcl)
+	var err error
+	if storage.nextPos == 0 {
+		storage.nextPos, err = bucket.AppendObject(objName, objValue, storage.nextPos, oss.Meta("File-Upload-Status", "Pending"), storageType, objectAcl)
+	} else {
+		storage.nextPos, err = bucket.AppendObject(objName, objValue, storage.nextPos, storageType, objectAcl)
+	}
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (broker *OssStorageBroker) setObjMeta(objName, key, val string) error {
 	return broker.bucket.SetObjectMeta(objName, oss.Meta(key, val))
 }
 func (broker *OssStorageBroker) getObjMeta(objName string, key string) (string, error) {
-
-	h, err := broker.bucket.GetObjectMeta(objName)
+	h, err := broker.bucket.GetObjectDetailedMeta(objName)
 	if err != nil {
 		return "", err
 	}
 	return h.Get(oss.HTTPHeaderOssMetaPrefix + key), nil
-
 }
 
 func (broker *OssStorageBroker) Read(p []byte) (int, error) {
@@ -202,8 +198,8 @@ func (broker *OssStorageBroker) Close() error {
 	}
 }
 
-func (broker *OssStorageBroker) Exist(objNmae string) (bool, error) {
-	isExist, err := broker.bucket.IsObjectExist(objNmae)
+func (broker *OssStorageBroker) Exist() (bool, error) {
+	isExist, err := broker.bucket.IsObjectExist(broker.objName)
 	if err != nil {
 		return false, err
 	}

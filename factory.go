@@ -1,4 +1,4 @@
-package factory
+package file_helper
 
 import "github.com/pp-group/file_helper/storage"
 

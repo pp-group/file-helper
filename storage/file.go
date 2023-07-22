@@ -31,7 +31,8 @@ var _ IBroker = new(LocalFileStorageBroker)
 
 type LocalFileStorageBroker struct {
 	*os.File
-	folder string
+	fileName string
+	folder   string
 }
 
 func NewLocalFileStorageBroker(folder string, fileName string) (*LocalFileStorageBroker, error) {
@@ -50,32 +51,32 @@ func NewLocalFileStorageBroker(folder string, fileName string) (*LocalFileStorag
 	}
 
 	return &LocalFileStorageBroker{
-		File:   f,
-		folder: folder,
+		File:     f,
+		fileName: filepath.Join(folder, fileName),
+		folder:   folder,
 	}, nil
 }
 
 func (broker *LocalFileStorageBroker) Close() error {
 	return broker.File.Close()
 }
-func (broker *LocalFileStorageBroker) Exist(fullPath string) (bool, error) {
-	file, err := os.Open(fullPath)
+func (broker *LocalFileStorageBroker) Exist() (bool, error) {
+	file, err := os.Open(broker.fileName)
 	if os.IsNotExist(err) {
 		return false, nil
 	}
 	file.Close()
 	return true, nil
 }
-func (broker *LocalFileStorageBroker) URL(filename string) (string, error) {
-	fullPath := filepath.Join(broker.folder, filename)
-	b, err := broker.Exist(fullPath)
+func (broker *LocalFileStorageBroker) URL() (string, error) {
+	b, err := broker.Exist()
 	if err != nil {
 		return "", nil
 	}
 	if !b {
 		return "", os.ErrNotExist
 	}
-	return fullPath, nil
+	return broker.fileName, nil
 
 }
 func (broker *LocalFileStorageBroker) Delete(filename string) error {

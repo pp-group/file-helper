@@ -28,8 +28,8 @@ type IBroker interface {
 
 type BrokerBundle interface {
 	Close() error
-	Exist(string) (bool, error)
-	URL(string) (string, error)
+	Exist() (bool, error)
+	URL() (string, error)
 }
 
 type IManageBroker interface {

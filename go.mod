@@ -1,4 +1,4 @@
-module github.com/pp-group/file_helper
+module github.com/pp-group/file-helper
 
 go 1.20
 

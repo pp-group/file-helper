@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pp-group/file_helper"
+	file_helper "github.com/pp-group/file-helper"
 )
 
 func TestLocalBaseStorageFeature(t *testing.T) {

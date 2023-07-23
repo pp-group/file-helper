@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pp-group/file_helper"
+	file_helper "github.com/pp-group/file-helper"
 )
 
 //todo add the testcase
